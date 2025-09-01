@@ -44,10 +44,16 @@ jobs:
           echo "PORTAL_POST_LOGIN_URL=${{ secrets.PORTAL_POST_LOGIN_URL }}" >> $GITHUB_ENV
           echo "ICS_DOWNLOAD_SELECTOR=${{ secrets.ICS_DOWNLOAD_SELECTOR }}" >> $GITHUB_ENV
 
-      - name: Fetch latest ICS and publish
+      - name: Fetch latest ICS and publish (debug)
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
-          python fetch_and_publish.py
-
+          set -x
+          python fetch_and_publish.py || true
+          echo "Exit code: $?"
+          echo "Files in public/:"
+          ls -la public || true
+          
       # Optional: also publish at repo root for a cleaner URL
       - name: Publish ICS at repo root
         run: |
