@@ -37,6 +37,17 @@ jobs:
           else
             echo "No STORAGE_STATE_B64 provided; skipping."
           fi
+          
+      - name: Restore storage state (required)
+        run: |
+          if [ -z "${{ secrets.STORAGE_STATE_B64 }}" ]; then
+            echo "ERROR: Missing STORAGE_STATE_B64 secret"; exit 1; fi
+          mkdir -p auth
+          echo "${{ secrets.STORAGE_STATE_B64 }}" | base64 -d > auth/sit_storage.json
+          echo "Restored auth/sit_storage.json:"
+          ls -la auth
+          # show first bytes (redacted-ish)
+          head -c 80 auth/sit_storage.json | base64
 
       - name: Configure env
         run: |
@@ -49,10 +60,19 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -x
+          python - <<'PY'
+          import os, pathlib
+          print("DEBUG: FETCH_MODE =", os.getenv("FETCH_MODE"))
+          print("DEBUG: PORTAL_POST_LOGIN_URL =", bool(os.getenv("PORTAL_POST_LOGIN_URL")))
+          print("DEBUG: ICS_DOWNLOAD_SELECTOR set? ", bool(os.getenv("ICS_DOWNLOAD_SELECTOR")))
+          print("DEBUG: Storage exists? ", pathlib.Path("auth/sit_storage.json").exists())
+          PY
           python fetch_and_publish.py || true
           echo "Exit code: $?"
           echo "Files in public/:"
           ls -la public || true
+          echo "If calendar.ics exists, show size:"
+          test -f public/calendar.ics && wc -c < public/calendar.ics || true
           
       # Optional: also publish at repo root for a cleaner URL
       - name: Publish ICS at repo root
