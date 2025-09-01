@@ -1,0 +1,51 @@
+name: Update Timetable ICS
+on:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install chromium
+
+      - name: Restore storage state (optional)
+        if: ${{ secrets.STORAGE_STATE_B64 != '' }}
+        run: |
+          mkdir -p auth
+          echo "${{ secrets.STORAGE_STATE_B64 }}" | base64 -d > auth/sit_storage.json
+
+      - name: Configure env
+        run: |
+          echo "FETCH_MODE=${{ secrets.FETCH_MODE }}" >> $GITHUB_ENV
+          echo "PUBLIC_ICS_URL=${{ secrets.PUBLIC_ICS_URL }}" >> $GITHUB_ENV
+          echo "PORTAL_LOGIN_URL=${{ secrets.PORTAL_LOGIN_URL }}" >> $GITHUB_ENV
+          echo "PORTAL_USERNAME=${{ secrets.PORTAL_USERNAME }}" >> $GITHUB_ENV
+          echo "PORTAL_PASSWORD=${{ secrets.PORTAL_PASSWORD }}" >> $GITHUB_ENV
+          echo "ICS_DOWNLOAD_SELECTOR=${{ secrets.ICS_DOWNLOAD_SELECTOR }}" >> $GITHUB_ENV
+
+      - name: Fetch latest ICS and publish
+        run: |
+          python fetch_and_publish.py
+
+      - name: Commit updated ICS
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/calendar*.ics
+          git commit -m "chore: update mirrored ICS" || echo "No changes to commit"
+          git push
