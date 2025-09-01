@@ -1,14 +1,18 @@
 name: Update Timetable ICS
+
 on:
+  push:
+    branches: [ "main" ]          # run on any commit to main
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours
-  workflow_dispatch: {}
+    - cron: "0 */2 * * *"         # every 2 hours
+  workflow_dispatch: {}            # manual button
 
 jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,29 +27,36 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install chromium
 
+      # Restore cookies from the repo secret if present (no step-level if:)
       - name: Restore storage state (optional)
-        if: ${{ secrets.STORAGE_STATE_B64 != '' }}
         run: |
-          mkdir -p auth
-          echo "${{ secrets.STORAGE_STATE_B64 }}" | base64 -d > auth/sit_storage.json
+          if [ -n "${{ secrets.STORAGE_STATE_B64 }}" ]; then
+            mkdir -p auth
+            echo "${{ secrets.STORAGE_STATE_B64 }}" | base64 -d > auth/sit_storage.json
+            echo "Restored auth/sit_storage.json from secret."
+          else
+            echo "No STORAGE_STATE_B64 provided; skipping."
+          fi
 
       - name: Configure env
         run: |
           echo "FETCH_MODE=${{ secrets.FETCH_MODE }}" >> $GITHUB_ENV
-          echo "PUBLIC_ICS_URL=${{ secrets.PUBLIC_ICS_URL }}" >> $GITHUB_ENV
-          echo "PORTAL_LOGIN_URL=${{ secrets.PORTAL_LOGIN_URL }}" >> $GITHUB_ENV
-          echo "PORTAL_USERNAME=${{ secrets.PORTAL_USERNAME }}" >> $GITHUB_ENV
-          echo "PORTAL_PASSWORD=${{ secrets.PORTAL_PASSWORD }}" >> $GITHUB_ENV
+          echo "PORTAL_POST_LOGIN_URL=${{ secrets.PORTAL_POST_LOGIN_URL }}" >> $GITHUB_ENV
           echo "ICS_DOWNLOAD_SELECTOR=${{ secrets.ICS_DOWNLOAD_SELECTOR }}" >> $GITHUB_ENV
 
       - name: Fetch latest ICS and publish
         run: |
           python fetch_and_publish.py
 
+      # Optional: also publish at repo root for a cleaner URL
+      - name: Publish ICS at repo root
+        run: |
+          cp public/calendar.ics ./calendar.ics || true
+
       - name: Commit updated ICS
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/calendar*.ics
+          git add public/calendar*.ics calendar*.ics || true
           git commit -m "chore: update mirrored ICS" || echo "No changes to commit"
           git push
